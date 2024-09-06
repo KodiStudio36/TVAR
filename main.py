@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import QApplication, QMainWindow, QShortcut, QStackedWidget
 from PyQt5.QtGui import QPixmap, QIcon, QKeySequence
 from PyQt5 import QtCore
-import sys, os
+import sys
 
 from home_screen import HomeScreen
 from settings_screen import SettingsScreen
@@ -14,13 +14,10 @@ class MainWindow(QMainWindow):
         super(MainWindow, self).__init__(parent)
 
         self.shortcut = QShortcut(QKeySequence("S"), self)
-        self.shortcut.activated.connect(lambda: self.add_screen(SettingsScreen(self)))
+        self.shortcut.activated.connect(self.toggle_settings)
 
         self.shortcut = QShortcut(QKeySequence("R"), self)
         self.shortcut.activated.connect(self.toggle_replay)
-
-        self.shortcut = QShortcut(QKeySequence("Escape"), self)
-        self.shortcut.activated.connect(self.remove_screen)
 
         self.central_widget = QStackedWidget()
         # Set the central widget.
@@ -33,23 +30,19 @@ class MainWindow(QMainWindow):
 
         self.home_widget = HomeScreen(self)
         self.replay_widget = ReplayScreen(self)
+        self.settings_widget = SettingsScreen(self)
         self.central_widget.addWidget(self.home_widget)
         self.central_widget.addWidget(self.replay_widget)
+        self.central_widget.addWidget(self.settings_widget)
 
     @QtCore.pyqtSlot()
-    def add_screen(self, screen) -> None:
-        if type(self.central_widget.currentWidget()) != type(screen):
-            self.central_widget.addWidget(screen)
-            self.central_widget.setCurrentWidget(screen)
-
-    @QtCore.pyqtSlot()
-    def remove_screen(self) -> None:
-        current_index = self.central_widget.currentIndex()
-        if current_index > 0:
-            widget_to_remove = self.central_widget.widget(current_index)
-            self.central_widget.removeWidget(widget_to_remove)
-            widget_to_remove.deleteLater()
-            self.central_widget.setCurrentIndex(current_index - 1)
+    def toggle_settings(self):
+        if self.central_widget.currentWidget() == self.settings_widget:
+            self.central_widget.setCurrentWidget(self.home_widget)
+            self.resume_recording()
+        else:
+            self.pause_recording()
+            self.central_widget.setCurrentWidget(self.settings_widget)
 
     @QtCore.pyqtSlot()
     def toggle_replay(self):
@@ -59,20 +52,16 @@ class MainWindow(QMainWindow):
             self.resume_recording()
         else:
             self.pause_recording()
-            self.replay_widget.load_video(f'{os.path.dirname(__file__)}/filename0.avi')
+            self.replay_widget.start_video(self.home_widget.current_camera_idx)
             self.central_widget.setCurrentWidget(self.replay_widget)
 
     def pause_recording(self):
-        if self.home_widget.url_0: self.home_widget.CaptureIpCameraFramesWorker_0.pause()
-        if self.home_widget.url_1: self.home_widget.CaptureIpCameraFramesWorker_1.pause()
-        if self.home_widget.url_2: self.home_widget.CaptureIpCameraFramesWorker_2.pause()
-        if self.home_widget.url_3: self.home_widget.CaptureIpCameraFramesWorker_3.pause()
+        for cam in self.home_widget.cams:
+            cam.CaptureIpCameraFramesWorker.pause()
 
     def resume_recording(self):
-        if self.home_widget.url_0: self.home_widget.CaptureIpCameraFramesWorker_0.unpause()
-        if self.home_widget.url_1: self.home_widget.CaptureIpCameraFramesWorker_1.unpause()
-        if self.home_widget.url_2: self.home_widget.CaptureIpCameraFramesWorker_2.unpause()
-        if self.home_widget.url_3: self.home_widget.CaptureIpCameraFramesWorker_3.unpause()
+        for cam in self.home_widget.cams:
+            cam.CaptureIpCameraFramesWorker.unpause()
 
 
 def main() -> None:

@@ -1,219 +1,290 @@
-# from PyQt5.QtWidgets import QWidget, QPushButton, QHBoxLayout, QVBoxLayout, QSlider, QStyle, QFileDialog
-# from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
-# from PyQt5.QtMultimediaWidgets import QVideoWidget
-# from PyQt5.QtGui import QPainter, QPen
-# from PyQt5.QtCore import Qt, QUrl, QRect
-# import os
+import os
+from PyQt5.QtMultimediaWidgets import QGraphicsVideoItem
+from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QVBoxLayout, QWidget, QPushButton, QShortcut, QSlider, QStyle, QHBoxLayout
+from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
+from PyQt5.QtCore import QUrl, Qt, QSizeF
+from PyQt5.QtGui import QWheelEvent, QMouseEvent, QKeySequence
 
+class VideoWidget(QGraphicsView):
+    def __init__(self):
+        super().__init__()
 
-# class ZoomableVideoWidget(QVideoWidget):
-#     def __init__(self, parent=None):
-#         super(ZoomableVideoWidget, self).__init__(parent)
-#         self.setMouseTracking(True)
-#         self.zoom_rect = QRect()
-#         self.drawing = False
-#         self.zoom_factor = 1.0
+        self.fps = 30
 
-#     def mousePressEvent(self, event):
-#         print("aaa")
-#         if event.button() == Qt.LeftButton:
-#             print("press")
-#             self.zoom_rect.setTopLeft(event.pos())
-#             self.zoom_rect.setBottomRight(event.pos())
-#             self.drawing = True
-#             self.update()
+        # Create a scene and a video item
+        self.scene = QGraphicsScene(self)
+        self.videoItem = QGraphicsVideoItem()
+        self.scene.addItem(self.videoItem)
 
-#     def mouseMoveEvent(self, event):
-#         if self.drawing:
-#             print("drawing moving")
-#             self.zoom_rect.setBottomRight(event.pos())
-#             self.update()
+        # Set the scene on the view
+        self.setScene(self.scene)
 
-#     def mouseReleaseEvent(self, event):
-#         if event.button() == Qt.LeftButton:
-#             self.drawing = False
-#             self.update()
-#             self.apply_zoom()
+        # Set up the media player
+        self.mediaPlayer = QMediaPlayer(None, QMediaPlayer.VideoSurface)
+        self.mediaPlayer.setVideoOutput(self.videoItem)
 
-#     def paintEvent(self, event):
-#         super(ZoomableVideoWidget, self).paintEvent(event)
-#         if not self.zoom_rect.isNull():
-#             painter = QPainter(self)
-#             painter.setPen(QPen(Qt.red, 2, Qt.SolidLine))
-#             painter.drawRect(self.zoom_rect)
+        # Set some initial zoom factor
+        self.zoom_factor = 1.0
 
-#     def apply_zoom(self):
-#         if not self.zoom_rect.isNull():
-#             self.zoom_factor = min(self.width() / self.zoom_rect.width(),
-#                                    self.height() / self.zoom_rect.height())
-#             self.update()
+        # Dragging variables
+        self.dragging = False
+        self.last_mouse_pos = None
 
-#     def resizeEvent(self, event):
-#         super(ZoomableVideoWidget, self).resizeEvent(event)
-#         self.zoom_factor = 1.0
-#         self.update()
+        self.path = os.path.dirname(__file__)
 
-#     def paintEvent(self, event):
-#         super(ZoomableVideoWidget, self).paintEvent(event)
-#         if not self.zoom_rect.isNull():
-#             painter = QPainter(self)
-#             painter.setPen(QPen(Qt.red, 2, Qt.SolidLine))
-#             painter.drawRect(self.zoom_rect)
+        self.show()
 
-#             if self.drawing or self.zoom_factor != 1.0:
-#                 target_rect = QRect(0, 0, self.width(), self.height())
-#                 source_rect = QRect(self.zoom_rect.left() * self.zoom_factor,
-#                                     self.zoom_rect.top() * self.zoom_factor,
-#                                     self.zoom_rect.width() * self.zoom_factor,
-#                                     self.zoom_rect.height() * self.zoom_factor)
-#                 painter.drawImage(target_rect, self.grab(source_rect).toImage(), source_rect)
+    def resizeEvent(self, event):
+        """ Resize the video item to maintain the aspect ratio 4:3 """
+        view_width = self.size().width() - 2
+        view_height = self.size().height() - 2
 
-# class ReplayScreen(QWidget):
+        if view_height > view_width:
+            # Calculate the height for 4:3 aspect ratio
+            view_height = view_width * 3 / 4
 
-#     def __init__(self, parent=None):
-#         super(ReplayScreen, self).__init__(parent)
+        else:
+            view_width = view_height * 4 / 3
 
-#         # Create a QMediaPlayer object
-#         self.mediaPlayer = QMediaPlayer(None, QMediaPlayer.VideoSurface)
+        # Set the size of the video item
+        self.videoItem.setSize(QSizeF(view_width, view_height))
 
-#         # Create a QVideoWidget object to display video
-#         videowidget = ZoomableVideoWidget()
+        # Center the video item in the scene
+        self.videoItem.setPos(0, 0)
 
-#         # Create a QPushButton to open video files
-#         openBtn = QPushButton('Open Video')
-#         openBtn.clicked.connect(self.open_file)
+        super().resizeEvent(event)
 
-#         # Create a QPushButton to play or pause the video
-#         self.playBtn = QPushButton()
-#         self.playBtn.setEnabled(False)
-#         self.playBtn.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
-#         self.playBtn.clicked.connect(self.play_video)
+    def wheelEvent(self, event: QWheelEvent):
+        """ Handle mouse wheel event to zoom in and out """
+        if event.angleDelta().y() > 0:
+            self.zoom_in()
+        else:
+            self.zoom_out()
 
-#         # Create a QSlider for seeking within the video
-#         self.slider = QSlider(Qt.Horizontal)
-#         self.slider.setRange(0,0)
-#         self.slider.sliderMoved.connect(self.set_position)
+    def zoom_in(self):
+        self.zoom_factor += 0.1
+        self.setTransformAA()
 
-#         # Create a QHBoxLayout for arranging widgets horizontally
-#         hboxLayout = QHBoxLayout()
-#         hboxLayout.setContentsMargins(0,0,0,0)
+    def zoom_out(self):
+        if self.zoom_factor > 1.0:
+            self.zoom_factor -= 0.1
+            self.setTransformAA()
 
-#         # Add widgets to the QHBoxLayout
-#         hboxLayout.addWidget(openBtn)
-#         hboxLayout.addWidget(self.playBtn)
-#         hboxLayout.addWidget(self.slider)
+    def zoom_reset(self):
+        self.zoom_factor = 1
+        self.setTransformAA()
 
-#         # Create a QVBoxLayout for arranging widgets vertically
-#         vboxLayout = QVBoxLayout()
-#         vboxLayout.addWidget(videowidget)
-#         vboxLayout.addLayout(hboxLayout)
+    def setTransformAA(self):
+        transform = self.transform()
+        transform.reset()  # Reset any previous transformations
+        transform.scale(self.zoom_factor, self.zoom_factor)
+        self.setTransform(transform)
 
-#         # Set the layout of the window
-#         self.setLayout(vboxLayout)
+    def mousePressEvent(self, event: QMouseEvent):
+        """ Handle mouse press event for dragging """
+        if event.button() == Qt.LeftButton:
+            self.dragging = True
+            self.last_mouse_pos = event.pos()
 
-#         # Set the video output for the media player
-#         self.mediaPlayer.setVideoOutput(videowidget)
+    def mouseMoveEvent(self, event: QMouseEvent):
+        """ Handle mouse move event for dragging """
+        if self.dragging:
+            # Calculate how much the mouse moved
+            delta = event.pos() - self.last_mouse_pos
+            self.last_mouse_pos = event.pos()
 
-#         # Connect media player signals to their respective slots
-#         self.mediaPlayer.stateChanged.connect(self.mediastate_changed)
-#         self.mediaPlayer.positionChanged.connect(self.position_changed)
-#         self.mediaPlayer.durationChanged.connect(self.duration_changed)
+            # Scroll the scene by the delta
+            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta.x())
+            self.verticalScrollBar().setValue(self.verticalScrollBar().value() - delta.y())
 
-#         self.mediaPlayer.setMedia(QMediaContent(QUrl.fromLocalFile(f'{os.path.dirname(__file__)}/test.avi')))
-#         self.playBtn.setEnabled(True)
+    def mouseReleaseEvent(self, event: QMouseEvent):
+        """ Handle mouse release event to stop dragging """
+        if event.button() == Qt.LeftButton:
+            self.dragging = False
 
-#     # Method to open a video file
-#     def open_file(self):
-#         filename, _ = QFileDialog.getOpenFileName(self, "Open Video")
+    def play_video(self):
+        self.mediaPlayer.play()
 
-#         if filename != '':
-#             self.mediaPlayer.setMedia(QMediaContent(QUrl.fromLocalFile(filename)))
-#             self.playBtn.setEnabled(True)
+    def pause_video(self):
+        self.mediaPlayer.pause()
 
-#     # Method to play or pause the video
-#     def play_video(self):
-#         if self.mediaPlayer.state() == QMediaPlayer.PlayingState:
-#             self.mediaPlayer.pause()
-#         else:
-#             self.mediaPlayer.play()
+    def set_position(self, position):
+        self.mediaPlayer.setPosition(position)
 
-#     # Method to handle changes in media player state (playing or paused)
-#     def mediastate_changed(self, state):
-#         if self.mediaPlayer.state() == QMediaPlayer.PlayingState:
-#             self.playBtn.setIcon(
-#                 self.style().standardIcon(QStyle.SP_MediaPause)
-#             )
-#         else:
-#             self.playBtn.setIcon(
-#                 self.style().standardIcon(QStyle.SP_MediaPlay)
-#             )
+    def frame_forward(self):
+        current_position = self.mediaPlayer.position()
+        new_position = int(current_position + 1000 / self.fps)
+        self.mediaPlayer.setPosition(new_position)
 
-#     # Method to handle changes in video position
-#     def position_changed(self, position):
-#         self.slider.setValue(position)
+    def frame_backward(self):
+        current_position = self.mediaPlayer.position()
+        new_position = int(current_position - 1000 / self.fps)
+        self.mediaPlayer.setPosition(new_position)
 
-#     # Method to handle changes in video duration
-#     def duration_changed(self, duration):
-#         self.slider.setRange(0, duration)
+    def sec_forward(self):
+        current_position = self.mediaPlayer.position()
+        new_position = int(current_position + 1000)
+        self.mediaPlayer.setPosition(new_position)
 
-#     # Method to set the video position
-#     def set_position(self, position):
-#         self.mediaPlayer.setPosition(position)
+    def sec_backward(self):
+        current_position = self.mediaPlayer.position()
+        new_position = int(current_position - 1000)
+        self.mediaPlayer.setPosition(new_position)
 
+    def load_video(self, filename, duration=None):
+        self.mediaPlayer.setMedia(QMediaContent(QUrl.fromLocalFile(f'{self.path}/{filename}')))
+        if duration:
+            self.mediaPlayer.setPosition(duration)
 
-# replay_screen.py
+        self.mediaPlayer.play()
+        self.mediaPlayer.pause()
 
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QSlider, QHBoxLayout
-from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QPixmap, QImage
-import cv2
 
 class ReplayScreen(QWidget):
     def __init__(self, parent=None):
         super(ReplayScreen, self).__init__(parent)
 
-        self.layout = QVBoxLayout(self)
-        self.video_label = QLabel(self)
-        self.layout.addWidget(self.video_label)
+        # Create and add the video widget
+        self.videoWidget = VideoWidget()
 
-        self.slider = QSlider(Qt.Horizontal, self)
-        self.slider.valueChanged.connect(self.update_frame)
-        self.layout.addWidget(self.slider)
+        # Create a QPushButton to play or pause the video
+        self.playBtn = QPushButton()
+        self.playBtn.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
+        self.playBtn.clicked.connect(self.play_video)
 
-        self.setLayout(self.layout)
+        self.frameBackward = QPushButton()
+        self.frameBackward.setIcon(self.style().standardIcon(QStyle.SP_MediaSeekBackward))
+        self.frameBackward.clicked.connect(self.frame_backward)
 
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.play_video)
-        self.cap = None
+        self.frameForward = QPushButton()
+        self.frameForward.setIcon(self.style().standardIcon(QStyle.SP_MediaSeekForward))
+        self.frameForward.clicked.connect(self.frame_forward)
 
-    def load_video(self, video_path):
-        self.cap = cv2.VideoCapture(video_path)
-        self.frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        self.slider.setMaximum(self.frame_count - 1)
-        self.timer.start(30)  # Adjust the interval as needed for the video FPS
+        self.secondBackward = QPushButton()
+        self.secondBackward.setIcon(self.style().standardIcon(QStyle.SP_ArrowBack))
+        self.secondBackward.clicked.connect(self.sec_backward)
 
+        self.secondForward = QPushButton()
+        self.secondForward.setIcon(self.style().standardIcon(QStyle.SP_ArrowForward))
+        self.secondForward.clicked.connect(self.sec_forward)
+
+        # Create a QSlider for seeking within the video
+        self.slider = QSlider(Qt.Horizontal)
+        self.slider.setRange(0,0)
+        self.slider.sliderMoved.connect(self.set_position)
+        self.slider.sliderPressed.connect(self.sliderPressed)
+        self.slider.sliderReleased.connect(self.sliderReleased)
+ 
+        # Create a QHBoxLayout for arranging widgets horizontally
+        hboxLayout = QHBoxLayout()
+        hboxLayout.setContentsMargins(0,0,0,0)
+ 
+        # Add widgets to the QHBoxLayout
+        hboxLayout.addWidget(self.playBtn)
+        hboxLayout.addWidget(self.frameBackward)
+        hboxLayout.addWidget(self.frameForward)
+        hboxLayout.addWidget(self.slider)
+        hboxLayout.addWidget(self.secondBackward)
+        hboxLayout.addWidget(self.secondForward)
+ 
+        # Create a QVBoxLayout for arranging widgets vertically
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.videoWidget)
+        layout.addLayout(hboxLayout)
+
+        self.setLayout(layout)
+
+        self.videoWidget.mediaPlayer.stateChanged.connect(self.mediastate_changed)
+        self.videoWidget.mediaPlayer.positionChanged.connect(self.position_changed)
+        self.videoWidget.mediaPlayer.durationChanged.connect(self.duration_changed)
+
+        self.isPlaying = False
+        self.isFirstOpen = False
+
+        self.shortcut = QShortcut(QKeySequence("1"), self)
+        self.shortcut.activated.connect(lambda: self.set_page("filename0.avi"))
+
+        self.shortcut = QShortcut(QKeySequence("2"), self)
+        self.shortcut.activated.connect(lambda: self.set_page("filename1.avi"))
+
+        self.shortcut = QShortcut(QKeySequence("3"), self)
+        self.shortcut.activated.connect(lambda: self.set_page("filename2.avi"))
+
+        self.shortcut = QShortcut(QKeySequence("4"), self)
+        self.shortcut.activated.connect(lambda: self.set_page("filename3.avi"))
+
+        self.shortcut = QShortcut(QKeySequence(" "), self)
+        self.shortcut.activated.connect(lambda: self.play_video())
+
+        self.shortcut = QShortcut(QKeySequence("Right"), self)
+        self.shortcut.activated.connect(lambda: self.frame_forward())
+
+        self.shortcut = QShortcut(QKeySequence("Left"), self)
+        self.shortcut.activated.connect(lambda: self.frame_backward())
+
+        self.shortcut = QShortcut(QKeySequence("Ctrl+Right"), self)
+        self.shortcut.activated.connect(lambda: self.sec_forward())
+
+        self.shortcut = QShortcut(QKeySequence("Ctrl+Left"), self)
+        self.shortcut.activated.connect(lambda: self.sec_backward())
+
+        self.shortcut = QShortcut(QKeySequence("Escape"), self)
+        self.shortcut.activated.connect(lambda: self.videoWidget.zoom_reset())
+
+    # Method to play or pause the video
     def play_video(self):
-        if self.cap and self.cap.isOpened():
-            ret, frame = self.cap.read()
-            if ret:
-                self.display_frame(frame)
-                self.slider.setValue(self.slider.value() + 1)
+        if self.videoWidget.mediaPlayer.state() == QMediaPlayer.PlayingState:
+            self.videoWidget.pause_video()
+            self.isPlaying = False
+        else:
+            self.videoWidget.play_video()
+            self.isPlaying = True
 
-    def update_frame(self, position):
-        if self.cap and self.cap.isOpened():
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, position)
-            ret, frame = self.cap.read()
-            if ret:
-                self.display_frame(frame)
+    # Method to handle changes in media player state (playing or paused)
+    def mediastate_changed(self, state):
+        if state == QMediaPlayer.PlayingState:
+            self.playBtn.setIcon(self.style().standardIcon(QStyle.SP_MediaPause))
+        else:
+            self.playBtn.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
 
-    def display_frame(self, frame):
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        h, w, ch = frame.shape
-        bytes_per_line = ch * w
-        convert_to_Qt_format = QImage(frame.data, w, h, bytes_per_line, QImage.Format_RGB888)
-        self.video_label.setPixmap(QPixmap.fromImage(convert_to_Qt_format))
+    # Method to handle changes in video position
+    def position_changed(self, position):
+        self.slider.setValue(position)
+ 
+    # Method to handle changes in video duration
+    def duration_changed(self, duration):
+        self.slider.setRange(0, duration)
+
+    # Method to set the video position
+    def set_position(self, position):
+        self.videoWidget.set_position(position)
+
+    def sliderPressed(self):
+        self.videoWidget.pause_video()
+
+    def sliderReleased(self):
+        self.videoWidget.play_video()
+
+    def frame_forward(self):
+        self.videoWidget.frame_forward()
+
+    def frame_backward(self):
+        self.videoWidget.frame_backward()
+
+    def sec_forward(self):
+        self.videoWidget.sec_forward()
+
+    def sec_backward(self):
+        self.videoWidget.sec_backward()
+
+    def set_page(self, filename):
+        self.videoWidget.load_video(filename, self.videoWidget.mediaPlayer.position())
+        if self.isPlaying:
+            self.videoWidget.play_video()
+
+    def start_video(self, idx):
+        self.isFirstOpen = True
+        self.videoWidget.load_video(f'filename{idx}.avi')
 
     def stop_video(self):
-        self.timer.stop()
-        if self.cap:
-            self.cap.release()
+        pass
