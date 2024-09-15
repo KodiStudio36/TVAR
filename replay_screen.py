@@ -5,6 +5,8 @@ from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
 from PyQt5.QtCore import QUrl, Qt, QSizeF
 from PyQt5.QtGui import QWheelEvent, QMouseEvent, QKeySequence
 
+from config import Config
+
 class VideoWidget(QGraphicsView):
     def __init__(self):
         super().__init__()
@@ -29,8 +31,6 @@ class VideoWidget(QGraphicsView):
         # Dragging variables
         self.dragging = False
         self.last_mouse_pos = None
-
-        self.path = os.path.dirname(__file__)
 
         self.show()
 
@@ -132,7 +132,7 @@ class VideoWidget(QGraphicsView):
         self.mediaPlayer.setPosition(new_position)
 
     def load_video(self, filename, duration=None):
-        self.mediaPlayer.setMedia(QMediaContent(QUrl.fromLocalFile(f'{self.path}/{filename}')))
+        self.mediaPlayer.setMedia(QMediaContent(QUrl.fromLocalFile(f'{Config.PATH}/{filename}')))
         if duration:
             self.mediaPlayer.setPosition(duration)
 
@@ -202,16 +202,16 @@ class ReplayScreen(QWidget):
         self.isFirstOpen = False
 
         self.shortcut = QShortcut(QKeySequence("1"), self)
-        self.shortcut.activated.connect(lambda: self.set_page("filename0.avi"))
+        self.shortcut.activated.connect(lambda: self.set_page(f"{Config.FILENAME}0.{Config.FILEFORMAT}"))
 
         self.shortcut = QShortcut(QKeySequence("2"), self)
-        self.shortcut.activated.connect(lambda: self.set_page("filename1.avi"))
+        self.shortcut.activated.connect(lambda: self.set_page(f"{Config.FILENAME}1.{Config.FILEFORMAT}"))
 
         self.shortcut = QShortcut(QKeySequence("3"), self)
-        self.shortcut.activated.connect(lambda: self.set_page("filename2.avi"))
+        self.shortcut.activated.connect(lambda: self.set_page(f"{Config.FILENAME}2.{Config.FILEFORMAT}"))
 
         self.shortcut = QShortcut(QKeySequence("4"), self)
-        self.shortcut.activated.connect(lambda: self.set_page("filename3.avi"))
+        self.shortcut.activated.connect(lambda: self.set_page(f"{Config.FILENAME}3.{Config.FILEFORMAT}"))
 
         self.shortcut = QShortcut(QKeySequence(" "), self)
         self.shortcut.activated.connect(lambda: self.play_video())
@@ -284,7 +284,7 @@ class ReplayScreen(QWidget):
 
     def start_video(self, idx):
         self.isFirstOpen = True
-        self.videoWidget.load_video(f'filename{idx}.avi')
+        self.videoWidget.load_video(f'{Config.FILENAME}{idx}.{Config.FILEFORMAT}')
 
     def stop_video(self):
         pass
